@@ -1,0 +1,107 @@
+#!/bin/bash
+header(){
+  clear
+  echo "svn2git v1.0"
+  echo "SVN to Git repository converter"
+  echo "          by http://wend.com.br"
+  echo "-------------------------------"
+  return 0
+}
+
+usage(){
+  cat <<EOF
+
+  usage: 
+     $0 authors  <svnrepo>
+         Import authors from SVN repository to  ./authors.txt file.
+
+     $0 convert <svnrepo> <gitrepo>
+
+  Parameters:
+
+     <svnrepo> url from svn repository. ex.: http://my-project.googlecode.com/svn/
+     <gitrepo> url from git repository. ex.: https://github.com/my-user/my-project.git
+
+EOF
+  return 1
+}
+
+svn_authors(){
+  if [ $# -lt 1 ]
+  then
+    usage
+    exit 1
+  fi
+
+  echo "Doing checkout from SVN repository..."
+  svn co $1 ./svnrepo
+  cd ./svnrepo
+  echo "Importing Authors..."
+  svn log -q| awk -F '|' '/^r/ {sub("^ ", "", $2); sub(" $", "", $2); print $2" = "$2" <"$2">"}' | sort -u > ../authors.txt
+  cd ..
+  rm -rf ./svnrepo
+  cat <<EOF
+
+  Authors imported with success to ./users.txt with following format:
+      svn-username = Real Name <email address>
+
+  Open ./authors.txt with your favorite editor and adjust the content.
+
+EOF
+  return 0
+}
+
+svn_convert(){
+  if [ $# -lt 2 ]
+  then
+    usage
+    exit 1
+  fi
+
+  echo "Git cloning from SVN repository... "
+  git svn clone --stdlayout --no-metadata --authors-file=authors.txt $1 ./
+
+  echo "Referencing tags..."
+  git for-each-ref refs/remotes/tags | cut -d / -f 4- | grep -v @ | while read tagname; do git tag "$tagname" "tags/$tagname"; git branch -r -d "tags/$tagname"; done
+  echo "Referencing branches..."
+  git for-each-ref refs/remotes | cut -d / -f 3- | grep -v @ | while read branchname; do git branch "$branchname" "refs/remotes/$branchname"; git branch -r -d "$branchname"; done
+
+  echo "Removing svn:trunk..."
+  git branch -d trunk
+
+  echo "Adding git remote origin..."
+  git remote add origin $2
+
+  echo "Pushing ALL branches to GIT repository..."
+  git push origin --all
+
+  echo "Pushing TAGS to GIT repository..."
+  git push origin --tags
+
+  cat <<EOF
+
+Process has been Completed!
+
+Enjoy you GIT Repo...
+
+Regard, 
+
+Walker de Alencar
+http://wend.com.br
+
+EOF
+}
+
+header
+
+case $1 in 
+  authors)
+    svn_authors $2
+    ;;
+  convert)
+    svn_convert $2 $3
+    ;;
+  *)
+    usage
+    exit 1
+esac
